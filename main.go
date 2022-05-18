@@ -7,13 +7,14 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 	"math/rand"
 	"strconv"
 	"sync"
 	"time"
 )
 
-const version = "2022.2.1.28"
+const version = "2022.2.2.18"
 const programName = "Demodata Service"
 const programDescription = "Created demodata life it comes from Zapsi devices"
 const downloadInSeconds = 10
@@ -43,6 +44,7 @@ func (p *program) run() {
 	db, _ := gorm.Open(postgres.Open(config), &gorm.Config{})
 	sqlDB, _ := db.DB()
 	defer sqlDB.Close()
+	checkDatabaseConnection()
 	writeProgramVersionIntoSettings(db)
 	createDevicesAndWorkplaces(db)
 	logInfo("MAIN", "Devices checked")
@@ -373,4 +375,27 @@ func writeProgramVersionIntoSettings(db *gorm.DB) {
 	settings.Value = version
 	db.Save(&settings)
 	logInfo("MAIN", "Updated version in database for "+programName)
+}
+
+func checkDatabaseConnection() {
+	databaseConnected := false
+	for !databaseConnected {
+		db, err := gorm.Open(postgres.Open(config), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+		sqlDB, _ := db.DB()
+		if err != nil {
+			logError("SYSTEM", "Database not connected: "+err.Error())
+			time.Sleep(1 * time.Second)
+		} else {
+			var checkUser database.User
+			db.Where("email = ?", "admin@admin.com").Find(&checkUser)
+			if checkUser.ID == 0 {
+				logError("SYSTEM", "Database not initialized")
+				sqlDB.Close()
+				time.Sleep(1 * time.Second)
+			} else {
+				sqlDB.Close()
+				databaseConnected = true
+			}
+		}
+	}
 }
