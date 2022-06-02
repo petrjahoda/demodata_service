@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
+	"github.com/TwiN/go-color"
 	"github.com/kardianos/service"
 	"github.com/petrjahoda/database"
 	"gorm.io/driver/postgres"
@@ -32,32 +34,32 @@ var (
 type program struct{}
 
 func (p *program) Start(s service.Service) error {
-	logInfo("MAIN", "Starting "+programName+" on "+s.Platform())
-	logInfo("MAIN", "© "+strconv.Itoa(time.Now().Year())+" Petr Jahoda")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Starting "+programName+" on "+s.Platform()))
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] © "+strconv.Itoa(time.Now().Year())+" Petr Jahoda"))
 	go p.run()
 	serviceRunning = true
 	return nil
 }
 
 func (p *program) run() {
-	logInfo("MAIN", "Program version "+version+" started")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Program version "+version+" started"))
 	db, _ := gorm.Open(postgres.Open(config), &gorm.Config{})
 	sqlDB, _ := db.DB()
 	defer sqlDB.Close()
 	checkDatabaseConnection()
 	writeProgramVersionIntoSettings(db)
 	createDevicesAndWorkplaces(db)
-	logInfo("MAIN", "Devices checked")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Devices checked"))
 	createTerminals(db)
-	logInfo("MAIN", "Terminals checked")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Terminals checked"))
 	createWorkshiftsForWorkplaces(db)
-	logInfo("MAIN", "Workshifts checked")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Workshifts checked"))
 	initialDataOK := createInitialData(db)
-	logInfo("MAIN", "Initial data checked")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Initial data checked"))
 	for {
 		start := time.Now()
-		logInfo("MAIN", "Program running")
-		logInfo("MAIN", "Active devices: "+strconv.Itoa(len(activeDevices))+", running devices: "+strconv.Itoa(len(runningDevices)))
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Program running"))
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Active devices: "+strconv.Itoa(len(activeDevices))+", running devices: "+strconv.Itoa(len(runningDevices))))
 		if initialDataOK {
 			for _, activeDevice := range activeDevices {
 				activeDeviceIsRunning := checkDevice(activeDevice)
@@ -65,12 +67,12 @@ func (p *program) run() {
 					go runDevice(activeDevice, db)
 				}
 			}
-			logInfo("MAIN", "Updating default terminal records")
+			fmt.Println(color.Ize(color.Green, "INF [MAIN] Updating default terminal records"))
 			updateDefaultTerminalRecords(db)
 		}
 		if time.Since(start) < (downloadInSeconds * time.Second) {
 			sleeptime := downloadInSeconds*time.Second - time.Since(start)
-			logInfo("MAIN", "Sleeping for "+sleeptime.String())
+			fmt.Println(color.Ize(color.Green, "INF [MAIN] Sleeping for "+sleeptime.String()))
 			time.Sleep(sleeptime)
 		}
 	}
@@ -82,14 +84,14 @@ func createInitialData(db *gorm.DB) bool {
 	var analogData database.DevicePortAnalogRecord
 	db.Last(&analogData)
 	if analogData.ID > 0 {
-		logInfo("MAIN", "Initial data already created")
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Initial data already created"))
 		return true
 	}
 	var devices []database.Device
 	db.Where("device_type_id = 1").Find(&devices)
-	logInfo("MAIN", "Creating initial data for "+strconv.Itoa(len(devices))+" devices")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Creating initial data for "+strconv.Itoa(len(devices))+" devices"))
 	for _, device := range devices {
-		logInfo("MAIN", "Creating initial data for "+device.Name)
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Creating initial data for "+device.Name))
 		insertTime := beginning
 		var analogPort database.DevicePort
 		db.Where("device_id = ? and device_port_type_id = 2", device.ID).Find(&analogPort)
@@ -148,9 +150,9 @@ func createInitialData(db *gorm.DB) bool {
 				digitalRecordsToInsert = nil
 			}
 		}
-		logInfo("MAIN", "Initial data created for "+device.Name)
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Initial data created for "+device.Name))
 	}
-	logInfo("MAIN", "Initial data created")
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Initial data created"))
 	return true
 }
 
@@ -173,7 +175,7 @@ func createWorkshiftsForWorkplaces(db *gorm.DB) {
 	db.Find(&workplaceWorkShifts)
 	db.Find(&workplaces)
 	if len(workplaceWorkShifts) == 0 {
-		logInfo("MAIN", "Creating workplace workshifts")
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Creating workplace workshifts"))
 		for _, workplace := range workplaces {
 			createWorkshiftsForWorkplace(workplace.ID, db)
 		}
@@ -196,7 +198,7 @@ func createTerminals(db *gorm.DB) {
 	var activeTerminals []database.Device
 	db.Where("device_type_id=?", deviceType.ID).Where("activated = ?", "1").Find(&activeTerminals)
 	if len(activeTerminals) == 0 {
-		logInfo("MAIN", "Creating terminals")
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Creating terminals"))
 		for i := 0; i < numberOfDevicesToCreate; i++ {
 			addTerminalWithWorkplace("CNC Terminal "+strconv.Itoa(i), "192.168.1."+strconv.Itoa(i), "CNC "+strconv.Itoa(i), db)
 		}
@@ -221,10 +223,10 @@ func addTerminalWithWorkplace(workplaceName string, ipAddress string, terminalNa
 func (p *program) Stop(s service.Service) error {
 	serviceRunning = false
 	for len(runningDevices) != 0 {
-		logInfo("MAIN", "Stopping, still running devices: "+strconv.Itoa(len(runningDevices)))
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Stopping, still running devices: "+strconv.Itoa(len(runningDevices))))
 		time.Sleep(1 * time.Second)
 	}
-	logInfo("MAIN", "Stopped on platform "+s.Platform())
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Stopped on platform "+s.Platform()))
 	return nil
 }
 
@@ -237,11 +239,11 @@ func main() {
 	prg := &program{}
 	s, err := service.New(prg, serviceConfig)
 	if err != nil {
-		logError("MAIN", err.Error())
+		fmt.Println(color.Ize(color.Red, "ERR [MAIN] "+err.Error()))
 	}
 	err = s.Run()
 	if err != nil {
-		logError("MAIN", "Problem starting "+serviceConfig.Name)
+		fmt.Println(color.Ize(color.Red, "ERR [MAIN] Problem starting "+serviceConfig.Name))
 	}
 }
 
@@ -250,7 +252,7 @@ func createDevicesAndWorkplaces(db *gorm.DB) {
 	db.Where("name=?", "Zapsi").Find(&deviceType)
 	db.Where("device_type_id=?", deviceType.ID).Where("activated = ?", "1").Find(&activeDevices)
 	if len(activeDevices) == 0 {
-		logInfo("MAIN", "Creating devices")
+		fmt.Println(color.Ize(color.Green, "INF [MAIN] Creating devices"))
 		for i := 0; i < numberOfDevicesToCreate; i++ {
 			addDeviceWithWorkplace("CNC "+strconv.Itoa(i), "192.168.0."+strconv.Itoa(i), db)
 		}
@@ -300,7 +302,7 @@ func checkDevice(device database.Device) bool {
 }
 
 func runDevice(device database.Device, db *gorm.DB) {
-	logInfo(device.Name, "Device started running")
+	fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Device started running"))
 	deviceSync.Lock()
 	runningDevices = append(runningDevices, device)
 	deviceSync.Unlock()
@@ -312,7 +314,7 @@ func runDevice(device database.Device, db *gorm.DB) {
 	db.Where("device_id=?", device.ID).Where("device_port_type_id=1").Where("port_number=1").Find(&digitalPort)
 	var analogPort database.DevicePort
 	db.Where("device_id=?", device.ID).Where("device_port_type_id=2").Where("port_number=3").Find(&analogPort)
-	logInfo(device.Name, "Digital port id: "+strconv.Itoa(int(digitalPort.ID))+", analog port id: "+strconv.Itoa(int(analogPort.ID)))
+	fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Digital port id: "+strconv.Itoa(int(digitalPort.ID))+", analog port id: "+strconv.Itoa(int(analogPort.ID))))
 	pieceInserted := false
 	for deviceIsActive && serviceRunning {
 		start := time.Now()
@@ -321,28 +323,28 @@ func runDevice(device database.Device, db *gorm.DB) {
 		}
 		switch actualState {
 		case "production":
-			logInfo(device.Name, "Production -> "+strconv.Itoa(actualCycle)+" of "+strconv.Itoa(totalCycles))
+			fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Production -> "+strconv.Itoa(actualCycle)+" of "+strconv.Itoa(totalCycles)))
 			pieceInserted = generateProductionData(db, digitalPort, analogPort, pieceInserted)
 		case "downtime":
-			logInfo(device.Name, "Downtime -> "+strconv.Itoa(actualCycle)+" of "+strconv.Itoa(totalCycles))
+			fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Downtime -> "+strconv.Itoa(actualCycle)+" of "+strconv.Itoa(totalCycles)))
 			generateDowntimeData(db, analogPort)
 		case "poweroff":
-			logInfo(device.Name, "Poweroff -> "+strconv.Itoa(actualCycle)+" of "+strconv.Itoa(totalCycles))
+			fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Poweroff -> "+strconv.Itoa(actualCycle)+" of "+strconv.Itoa(totalCycles)))
 		}
-		logInfo(device.Name, "Processing takes "+time.Since(start).String())
+		fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Processing takes "+time.Since(start).String()))
 		sleep(device, start)
 		deviceIsActive = checkActive(device)
 		actualCycle++
 	}
 	removeDeviceFromRunningDevices(device)
-	logInfo(device.Name, "Device not active, stopped running")
+	fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Device not active, stopped running"))
 
 }
 
 func sleep(device database.Device, start time.Time) {
 	if time.Since(start) < (downloadInSeconds * time.Second) {
 		sleepTime := downloadInSeconds*time.Second - time.Since(start)
-		logInfo(device.Name, "Sleeping for "+sleepTime.String())
+		fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Sleeping for "+sleepTime.String()))
 		time.Sleep(sleepTime)
 	}
 }
@@ -350,11 +352,11 @@ func sleep(device database.Device, start time.Time) {
 func checkActive(device database.Device) bool {
 	for _, activeDevice := range activeDevices {
 		if activeDevice.Name == device.Name {
-			logInfo(device.Name, "Device still active")
+			fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Device still active"))
 			return true
 		}
 	}
-	logInfo(device.Name, "Device not active")
+	fmt.Println(color.Ize(color.Green, "INF ["+device.Name+"] Device not active"))
 	return false
 }
 
@@ -374,7 +376,7 @@ func writeProgramVersionIntoSettings(db *gorm.DB) {
 	settings.Name = programName
 	settings.Value = version
 	db.Save(&settings)
-	logInfo("MAIN", "Updated version in database for "+programName)
+	fmt.Println(color.Ize(color.Green, "INF [MAIN] Updated version in database for "+programName))
 }
 
 func checkDatabaseConnection() {
@@ -383,13 +385,13 @@ func checkDatabaseConnection() {
 		db, err := gorm.Open(postgres.Open(config), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 		sqlDB, _ := db.DB()
 		if err != nil {
-			logError("SYSTEM", "Database not connected: "+err.Error())
+			fmt.Println(color.Ize(color.Red, "ERR [SYSTEM] Database not connected: "+err.Error()))
 			time.Sleep(1 * time.Second)
 		} else {
 			var checkUser database.User
 			db.Where("email = ?", "admin@admin.com").Find(&checkUser)
 			if checkUser.ID == 0 {
-				logError("SYSTEM", "Database not initialized")
+				fmt.Println(color.Ize(color.Red, "ERR [SYSTEM] Database not initialized"))
 				sqlDB.Close()
 				time.Sleep(1 * time.Second)
 			} else {
